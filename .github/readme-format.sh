@@ -10,7 +10,7 @@ function get_maximum_length() {
     echo $maximum
 }
 
-head -96 README.md > README.tmp && mv README.tmp README.md
+awk '{ print } /^# Icons List$/ { print ""; exit }' README.md > README.tmp && mv README.tmp README.md
 
 icon_list=()
 for file in assets/*.svg; do
