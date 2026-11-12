@@ -46,29 +46,7 @@ jobs:
       - name: Add IconsJSON Variable
         run: go run build.go
       - name: Build Project Artifacts
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-      - name: Materialize Go function binaries
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          from shutil import copy2
-
-          for binary in Path('.vercel/output/functions').rglob('bootstrap'):
-              if binary.is_symlink():
-                  temporary = binary.with_suffix('.tmp')
-                  copy2(binary.resolve(strict=True), temporary)
-                  temporary.replace(binary)
-          PY
-      - name: Inspect prebuilt output
-        run: |
-          find .vercel/output -maxdepth 4 -name '*bootstrap*' -ls
-          du -sh .vercel/output
-      - uses: actions/upload-artifact@v7
-        with:
-          name: vercel-output
-          path: .vercel/output
-          include-hidden-files: true
-          retention-days: 1
+        run: vercel build --prod --standalone --token=${{ secrets.VERCEL_TOKEN }}
       - name: Deploy Project Artifacts to Vercel
         if: github.event_name != 'pull_request'
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
