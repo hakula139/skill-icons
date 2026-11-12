@@ -47,6 +47,18 @@ jobs:
         run: go run build.go
       - name: Build Project Artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Materialize Go function binaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from shutil import copy2
+
+          for binary in Path('.vercel/output/functions').rglob('bootstrap'):
+              if binary.is_symlink():
+                  temporary = binary.with_suffix('.tmp')
+                  copy2(binary.resolve(strict=True), temporary)
+                  temporary.replace(binary)
+          PY
       - name: Deploy Project Artifacts to Vercel
         if: github.event_name != 'pull_request'
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
