@@ -1,10 +1,12 @@
 {
-    "trailingSlash": false,
-    "rewrites": [
-      {
-        "source": "/api(.*)",
-        "destination": "/api/index.go"
-      }
-    ]
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/api(.*)",
+      "destination": "/api/index.go"
+    }
+  ],
+  "git": {
+    "deploymentEnabled": false
   }
-  
+}
