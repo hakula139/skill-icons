@@ -1,6 +1,6 @@
 module github.com/lelouchfr/skill-icons
 
-go 1.18
+go 1.27.4
 
 require github.com/gin-gonic/gin v1.9.1
 
