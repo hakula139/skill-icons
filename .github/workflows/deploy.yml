@@ -59,6 +59,16 @@ jobs:
                   copy2(binary.resolve(strict=True), temporary)
                   temporary.replace(binary)
           PY
+      - name: Inspect prebuilt output
+        run: |
+          find .vercel/output -maxdepth 4 -name '*bootstrap*' -ls
+          du -sh .vercel/output
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vercel-output
+          path: .vercel/output
+          include-hidden-files: true
+          retention-days: 1
       - name: Deploy Project Artifacts to Vercel
         if: github.event_name != 'pull_request'
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
