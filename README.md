@@ -36,7 +36,7 @@ Change the `?i=js,html,css,wasm` to a list of your skills separated by ","s! You
 
 Some icons have a dark and light themed background. You can specify which theme you want as a url parameter.
 
-This is optional. The default theme is dark.
+This is optional. The default theme is auto.
 
 Change the `&theme=light` to either `dark` or `light`. The theme is the background color, so light theme has a white icon background, and dark has a black-ish.
 
@@ -64,7 +64,7 @@ Change the `&perline=3` to any number between 1 and 50.
 
 You can get the possiblity to add the name of the icons you put to help others that doesnt know what they are by using `&titles`.
 
-The value of `titles` is a boolean, so it should be `true` or `false`, default is `false`
+Titles are disabled by default. Any nonempty `titles` value enables them, including `titles=false`.
 
 ```md
 ![My Skills](https://go-skill-icons.vercel.app/api/icons?i=rust,surrealdb,actix,yew&titles=true)
@@ -89,6 +89,8 @@ Want to center the icons in your readme? The SVGs are automatically resized, so 
     <img src="https://go-skill-icons.vercel.app/api/icons?i=git,kubernetes,docker,c,vim" />
   </a>
 </p>
+
+For local development, run `go run build.go` before `go test ./...` or `go build -o skillicons ./cmd/server`. Generation writes `api/icons.json`, which is embedded during compilation. Run `./skillicons` to serve `/api/icons` on port 8080, or set `PORT` to use another port. Docker generates the catalog during its build.
 
 # Icons List
 

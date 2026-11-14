@@ -12,9 +12,9 @@ jobs:
         with:
           go-version-file: go.mod
       
-      - name: Install Go Packages
-        run: go mod tidy
-      - name: Add IconsJSON Variable
+      - name: Generate icon data
         run: go run build.go
-      - name: Build index.go
-        run: go build ./api/index.go
+      - name: Test packages
+        run: go test ./...
+      - name: Build server
+        run: go build -o skillicons ./cmd/server
