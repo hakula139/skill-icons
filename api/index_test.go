@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 func fixtureData(t *testing.T) []byte {
@@ -88,29 +90,40 @@ func TestInvalidPerLine(t *testing.T) {
 	}
 }
 
-func TestCatalogStable(t *testing.T) {
-	app := newApp(fixtureData(t))
-	explicit := request(app, "/api/icons?i=amber,js&titles=true").Body.String()
+func TestHandlerCatalogStable(t *testing.T) {
+	data := fixtureData(t)
+	originalApp := app
+	app = sync.OnceValue(func() *gin.Engine { return newApp(data) })
+	t.Cleanup(func() { app = originalApp })
+	handler := http.HandlerFunc(Handler)
+	explicit := request(handler, "/api/icons?i=amber,js&titles=true").Body.String()
 	wantGroups := map[string]int{"amber": 1, "birch-auto": 3, "javascript": 1}
 	pathIDs := regexp.MustCompile(`<path id="([^"]+)"/>`)
+	check := func() {
+		w := request(handler, "/api/icons?i=amber,js&titles=true")
+		if w.Code != 200 || w.Body.String() != explicit {
+			t.Error("explicit response changed")
+		}
+		all := request(handler, "/api/icons?i=all")
+		groups := map[string]int{}
+		for _, match := range pathIDs.FindAllStringSubmatch(all.Body.String(), -1) {
+			groups[match[1]]++
+		}
+		if all.Code != 200 || all.Header().Get("Content-Type") != "image/svg+xml" || strings.Count(all.Body.String(), `<g transform=`) != 5 || !reflect.DeepEqual(groups, wantGroups) || !strings.Contains(all.Body.String(), `width="273" height="48" viewBox="0 0 1456 256"`) {
+			t.Errorf("all response changed: %d %s", all.Code, all.Body.String())
+		}
+	}
+	for i := 0; i < 3; i++ {
+		check()
+	}
+
 	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 8; j++ {
-				w := request(app, "/api/icons?i=amber,js&titles=true")
-				if w.Code != 200 || w.Body.String() != explicit {
-					t.Error("explicit response changed")
-				}
-				all := request(app, "/api/icons?i=all")
-				groups := map[string]int{}
-				for _, match := range pathIDs.FindAllStringSubmatch(all.Body.String(), -1) {
-					groups[match[1]]++
-				}
-				if all.Code != 200 || all.Header().Get("Content-Type") != "image/svg+xml" || !reflect.DeepEqual(groups, wantGroups) || !strings.Contains(all.Body.String(), `width="273" height="48" viewBox="0 0 1456 256"`) {
-					t.Errorf("all response changed: %d %s", all.Code, all.Body.String())
-				}
+				check()
 			}
 		}()
 	}
