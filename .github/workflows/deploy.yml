@@ -39,11 +39,9 @@ jobs:
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
-      - name: Install Go Packages
-        run: go mod tidy
       - name: Pull Vercel Environment Information
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-      - name: Add IconsJSON Variable
+      - name: Generate icon data
         run: go run build.go
       - name: Build Project Artifacts
         run: vercel build --prod --standalone --token=${{ secrets.VERCEL_TOKEN }}

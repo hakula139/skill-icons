@@ -1,21 +1,27 @@
 package handler
 
 import (
+	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 )
 
-var icons map[string]string = make(map[string]string)
-var iconNameList []string
-var themedIcons []string
+//go:embed icons.json
+var iconsJSON []byte
 
-
+type catalog struct {
+	icons        map[string]string
+	iconNameList []string
+	themedIcons  []string
+}
 
 var shortNames = map[string]string{
 	"js":                "javascript",
@@ -93,13 +99,11 @@ var shortNames = map[string]string{
 	"arc":               "arcbrowser",
 	"hf":                "huggingface",
 	"sqla":              "sqlalchemy",
-    "notepad++":         "notepadpp",
-    "jq":                "jqlang",
+	"notepad++":         "notepadpp",
+	"jq":                "jqlang",
 }
 
-var (
-	app *gin.Engine
-)
+var app = sync.OnceValue(func() *gin.Engine { return newApp(iconsJSON) })
 
 const (
 	ICONS_PER_LINE = 15
@@ -107,38 +111,38 @@ const (
 	SCALE          = float64(ONE_ICON) / float64(300-44)
 )
 
-func generateSvg(iconNames []string, perLine int, hasTitlesEnabled bool, align string) string {
+func (c *catalog) generateSvg(iconNames []string, perLine int, hasTitlesEnabled bool, align string) string {
 	iconSvgList := make([]string, len(iconNames))
 
 	for i, name := range iconNames {
-		iconSvgList[i] = icons[name]
+		iconSvgList[i] = c.icons[name]
 	}
 
 	length := int(math.Min(float64(perLine*300), float64(len(iconNames)*300))) - 44
 	height := int(math.Ceil(float64(len(iconSvgList))/float64(perLine)))*300 - 44
 	scaledHeight := int(float64(height) * SCALE)
-    scaledWidth := int(float64(length) * SCALE)
+	scaledWidth := int(float64(length) * SCALE)
 
-    var svg string
-    if align == "center" {
-        svg = fmt.Sprintf(`
+	var svg string
+	if align == "center" {
+		svg = fmt.Sprintf(`
             <svg width="100%%" height="%d" viewBox="0 0 %d %d" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">
         `, scaledHeight, length, height)
-    } else if align == "right" {
-        svg = fmt.Sprintf(`
+	} else if align == "right" {
+		svg = fmt.Sprintf(`
             <svg width="calc(200%% - %dpx)" height="%d" viewBox="0 0 %d %d" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">
         `, scaledWidth, scaledHeight, length, height)
-    } else {
-        svg = fmt.Sprintf(`
+	} else {
+		svg = fmt.Sprintf(`
             <svg width="%d" height="%d" viewBox="0 0 %d %d" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1">
         `, scaledWidth, scaledHeight, length, height)
-    }
+	}
 
 	for index, i := range iconSvgList {
-        var title string
-        if hasTitlesEnabled {
-            title = fmt.Sprintf("<title>%s</title>", iconNames[index])
-        }
+		var title string
+		if hasTitlesEnabled {
+			title = fmt.Sprintf("<title>%s</title>", iconNames[index])
+		}
 
 		x := (index % perLine) * 300
 		y := (index / perLine) * 300
@@ -154,18 +158,18 @@ func generateSvg(iconNames []string, perLine int, hasTitlesEnabled bool, align s
 	return svg
 }
 
-func parseShortNames(names []string, theme string) []string {
+func (c *catalog) parseShortNames(names []string, theme string) []string {
 	result := make([]string, len(names))
 
 	for i, name := range names {
-		if contains(iconNameList, name) {
-			if contains(themedIcons, name) {
+		if contains(c.iconNameList, name) {
+			if contains(c.themedIcons, name) {
 				result[i] = name + "-" + theme
 			} else {
 				result[i] = name
 			}
 		} else if val, ok := shortNames[name]; ok {
-			if contains(themedIcons, val) {
+			if contains(c.themedIcons, val) {
 				result[i] = val + "-" + theme
 			} else {
 				result[i] = val
@@ -184,9 +188,8 @@ func contains(arr []string, str string) bool {
 	return false
 }
 
-func iconRoute(r *gin.RouterGroup) {
+func (c *catalog) iconRoute(r *gin.RouterGroup) {
 	r.GET("/icons", func(ctx *gin.Context) {
-
 		ctx.Request.ParseForm()
 		iconParam := ctx.Request.Form.Get("i")
 
@@ -200,75 +203,73 @@ func iconRoute(r *gin.RouterGroup) {
 			perLineStr = "15"
 		}
 
-        hasTitles := ctx.Request.Form.Get("titles")
-        var hasTitlesEnabled bool
-        if hasTitles == "" {
-            hasTitlesEnabled = false
-        } else {
-            hasTitlesEnabled = true
-        }
+		hasTitlesEnabled := ctx.Request.Form.Get("titles") != ""
 
-        align := ctx.Request.Form.Get("align")
-        if align != "left" && align != "right" && align != "center" {
-            align = "left"
-        }
+		align := ctx.Request.Form.Get("align")
+		if align != "left" && align != "right" && align != "center" {
+			align = "left"
+		}
 
 		if iconParam == "" {
 			ctx.String(http.StatusBadRequest, "You didn't specify any icons!")
 			return
 		}
 
-		if theme != "dark" && theme != "light" && theme != "auto" && theme != "" {
+		if theme != "dark" && theme != "light" && theme != "auto" {
 			ctx.String(http.StatusBadRequest, "Theme must be either 'light', 'dark' or 'auto'")
 			return
 		}
 
 		perLine, err := strconv.Atoi(perLineStr)
-		if err != nil || perLine < -1 || perLine > 50 {
+		if err != nil || perLine < 1 || perLine > 50 {
 			ctx.String(http.StatusBadRequest, "Icons per line must be a number between 1 and 50")
 			return
 		}
 
 		var iconShortNames []string
 		if iconParam == "all" {
-			iconShortNames = iconNameList
+			iconShortNames = c.iconNameList
 		} else {
 			iconShortNames = strings.Split(iconParam, ",")
 		}
 
-		iconNames := parseShortNames(iconShortNames, theme)
+		iconNames := c.parseShortNames(iconShortNames, theme)
 		if iconNames == nil {
 			ctx.String(http.StatusBadRequest, "You didn't format the icons param correctly!")
 			return
 		}
 
-		svg := generateSvg(iconNames, perLine, hasTitlesEnabled, align)
+		svg := c.generateSvg(iconNames, perLine, hasTitlesEnabled, align)
 
 		ctx.Header("Content-Type", "image/svg+xml")
 		ctx.String(http.StatusOK, svg)
 	})
 }
 
-func init() {
-	app = gin.New()
-	r := app.Group("/api")
-
-	iconRoute(r)
-}
-
-func Handler(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(strings.NewReader(iconsJSON))
-	if err := decoder.Decode(&icons); err != nil {
+func newApp(data []byte) *gin.Engine {
+	c := &catalog{icons: make(map[string]string)}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&c.icons); err != nil {
 		panic(err)
 	}
 
-	// Populate iconNameList and themedIcons
-	for key := range icons {
-		iconNameList = append(iconNameList, strings.Split(key, "-")[0])
+	for key := range c.icons {
+		c.iconNameList = append(c.iconNameList, strings.Split(key, "-")[0])
 		if strings.Contains(key, "-light") || strings.Contains(key, "-dark") || strings.Contains(key, "-auto") {
-			themedIcons = append(themedIcons, strings.Split(key, "-")[0])
+			c.themedIcons = append(c.themedIcons, strings.Split(key, "-")[0])
 		}
 	}
 
-	app.ServeHTTP(w, r)
+	router := gin.New()
+	c.iconRoute(router.Group("/api"))
+	return router
+}
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	app().ServeHTTP(w, r)
+}
+
+func Run() error {
+	gin.SetMode(gin.ReleaseMode)
+	return app().Run()
 }
